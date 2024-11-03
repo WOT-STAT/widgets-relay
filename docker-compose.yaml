@@ -17,5 +17,7 @@ services:
     restart: always
     build:
       dockerfile: ./Dockerfile
+    environment:
+      - ADMIN_TOKEN
     ports:
       - "9005:3000"

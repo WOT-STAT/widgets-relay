@@ -14,10 +14,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # - name: Copy .env
-      #   env:
-      #     DOTENV: ${{ secrets.DOTENV }}
-      #   run: cat <<< "$DOTENV" > ./compose/.env
+      - name: Copy .env
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+        run: cat <<< "$DOTENV" > ./.env
 
       - name: Configure SSH
         run: |

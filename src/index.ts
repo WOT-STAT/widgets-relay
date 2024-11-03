@@ -1,24 +1,44 @@
-const server = Bun.serve<{ uuid: string, channel: string }>({
-  fetch(req, server) {
-    const url = new URL(req.url);
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { app as admin, closeWs, openWs } from './admin';
 
-    const uuid = url.searchParams.get("uuid");
-    const channel = url.searchParams.get("channel");
-    if (!uuid) return new Response("No uuid provided", { status: 400 });
-    if (!channel) return new Response("No channel provided", { status: 400 });
+const app = new Hono()
+app.use(cors())
+app.route('/', admin)
 
-    const success = server.upgrade(req, { data: { uuid, channel } });
-    if (success) return undefined;
+app.get('/', (c) => {
+  const uuid = c.req.query('uuid')
+  const channel = c.req.query('channel')
 
-    return new Response("Redirecting...");
-  },
+  if (!uuid) return c.json({ message: 'No uuid provided' }, 400)
+  if (!channel) return c.json({ message: 'No channel provided' }, 400)
+
+  const success = server.upgrade(c.req.raw, { data: { uuid, channel } });
+  if (success) return new Response(null);
+
+  return c.json({ message: 'Redirecting...' })
+})
+
+const silent = Symbol('silent')
+app.get('/silent', (c) => {
+  const channel = c.req.query('channel')
+  if (!channel) return c.json({ message: 'No channel provided' }, 400)
+
+  const success = server.upgrade(c.req.raw, { data: { uuid: 'silent', channel, silent } });
+  if (success) return new Response(null);
+  return c.json({ message: 'Redirecting...' })
+})
+
+const server = Bun.serve<{ uuid: string, channel: string, silent?: typeof silent }>({
+  fetch: app.fetch,
   websocket: {
     open(ws) {
-      ws.subscribe(ws.data.channel);
-      server.publish(ws.data.channel, JSON.stringify({
-        type: "connect",
-        uuid: ws.data.uuid,
-      }));
+      const { channel, uuid, silent } = ws.data;
+      if (silent) return ws.subscribe(channel);
+
+      ws.subscribe(channel);
+      server.publish(channel, JSON.stringify({ type: "connect", uuid }));
+      openWs(channel, uuid);
     },
     message(ws, message) {
       if (message === "ping") {
@@ -28,11 +48,12 @@ const server = Bun.serve<{ uuid: string, channel: string }>({
       server.publish(ws.data.channel, message);
     },
     close(ws) {
-      server.publish(ws.data.channel, JSON.stringify({
-        type: "disconnect",
-        uuid: ws.data.uuid,
-      }));
-      ws.unsubscribe(ws.data.channel);
+      const { channel, uuid, silent } = ws.data;
+      if (silent) return ws.unsubscribe(channel);
+
+      server.publish(channel, JSON.stringify({ type: "disconnect", uuid }));
+      ws.unsubscribe(channel);
+      closeWs(channel, uuid);
     },
   },
 });
