@@ -9,4 +9,4 @@ services:
     environment:
       - ADMIN_TOKEN
     ports:
-      - "9005:3000"
+      - "9105:3000"
